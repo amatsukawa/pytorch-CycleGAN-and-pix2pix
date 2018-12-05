@@ -4,6 +4,8 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 
+from .glow import Glow
+
 ###############################################################################
 # Helper Functions
 ###############################################################################
@@ -58,7 +60,12 @@ def init_weights(net, init_type='normal', gain=0.02):
             init.normal_(m.weight.data, 1.0, gain)
             init.constant_(m.bias.data, 0.0)
 
-    print('initialize network with %s' % init_type)
+    netname = net.__class__.__name__
+    if netname == "Glow":
+        print('Skipping initialization for Glow, already set inside the class.')
+        return
+    else:
+        print('initialize network %s with %s' % (netname, init_type))
     net.apply(init_func)
 
 
@@ -66,7 +73,8 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     if len(gpu_ids) > 0:
         assert(torch.cuda.is_available())
         net.to(gpu_ids[0])
-        net = torch.nn.DataParallel(net, gpu_ids)
+        if len(gpu_ids) > 1:
+            net = torch.nn.DataParallel(net, gpu_ids)
     init_weights(net, init_type, gain=init_gain)
     return net
 
@@ -83,6 +91,9 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    elif netG == 'glow':
+        assert input_nc == output_nc, "invertible model must have same input_nc and output_nc"
+        net = Glow(32, input_nc, ngf, squeeze=4)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)

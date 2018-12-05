@@ -21,12 +21,17 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--niter', type=int, default=100, help='# of iter at starting learning rate')
         parser.add_argument('--niter_decay', type=int, default=100, help='# of iter to linearly decay learning rate to zero')
         parser.add_argument('--beta1', type=float, default=0.5, help='momentum term of adam')
-        parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
+        parser.add_argument('--g_lr', type=float, default=1e-5, help='generator initial learning rate for adam')
+        parser.add_argument('--d_lr', type=float, default=2e-4, help='discriminator initial learning rate for adam')
         parser.add_argument('--no_lsgan', action='store_true', help='do *not* use least square GAN, if false, use vanilla GAN')
         parser.add_argument('--pool_size', type=int, default=50, help='the size of image buffer that stores previously generated images')
         parser.add_argument('--no_html', action='store_true', help='do not save intermediate training results to [opt.checkpoints_dir]/[opt.name]/web/')
         parser.add_argument('--lr_policy', type=str, default='lambda', help='learning rate policy: lambda|step|plateau|cosine')
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
+
+        parser.add_argument('--g_weight_decay', type=float, default=1e-3, help='weight_decay on generator')
+        parser.add_argument('--g_grad_clip', type=float, default=1.0, help='gradient clipping on generator')
+        parser.add_argument('--d_grad_clip', type=float, default=1.0, help='gradient clipping on discriminator')
 
         self.isTrain = True
         return parser

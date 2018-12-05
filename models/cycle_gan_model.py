@@ -36,17 +36,29 @@ class CycleGANModel(BaseModel):
         self.visual_names = visual_names_A + visual_names_B
         # specify the models you want to save to the disk. The program will call base_model.save_networks and base_model.load_networks
         if self.isTrain:
-            self.model_names = ['G_A', 'G_B', 'D_A', 'D_B']
+            if self.opt.invertible:
+                self.model_names = ['G', 'D_A', 'D_B']
+            else:
+                self.model_names = ['G_A', 'G_B', 'D_A', 'D_B']
         else:  # during test time, only load Gs
-            self.model_names = ['G_A', 'G_B']
+            if self.opt.invertible:
+                self.model_names = ['G']
+            else:
+                self.model_names = ['G', 'D_A', 'D_B']
 
         # load/define networks
         # The naming conversion is different from those used in the paper
         # Code (paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-        self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
-                                        not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
-        self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm,
-                                        not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+        if self.opt.invertible:
+            self.netG = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
+                                            not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+            self.netG_A = self.netG.transform
+            self.netG_B = self.netG.transform.inv
+        else:
+            self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
+                                            not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
+            self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm,
+                                            not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
 
         if self.isTrain:
             use_sigmoid = opt.no_lsgan
@@ -63,10 +75,19 @@ class CycleGANModel(BaseModel):
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
             # initialize optimizers
-            self.optimizer_G = torch.optim.Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()),
-                                                lr=opt.lr, betas=(opt.beta1, 0.999))
-            self.optimizer_D = torch.optim.Adam(itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()),
-                                                lr=opt.lr, betas=(opt.beta1, 0.999))
+            if self.opt.invertible:
+                self.G_parameters = self.netG.parameters()
+            else:
+                self.G_parameters = itertools.chain(self.netG_A.parameters(), self.netG_B.parameters())
+
+
+            self.optimizer_G = torch.optim.Adam(self.G_parameters,
+                                                lr=opt.g_lr, betas=(opt.beta1, 0.999),
+                                                weight_decay=opt.g_weight_decay)
+
+            self.D_parameters = itertools.chain(self.netD_A.parameters(), self.netD_B.parameters())
+            self.optimizer_D = torch.optim.Adam(self.D_parameters,
+                                                lr=opt.d_lr, betas=(opt.beta1, 0.999))
             self.optimizers = []
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
@@ -83,6 +104,10 @@ class CycleGANModel(BaseModel):
 
         self.fake_A = self.netG_B(self.real_B)
         self.rec_B = self.netG_A(self.fake_A)
+
+        if self.opt.tanh:
+            self.fake_B = self.fake_B.tanh()
+            self.fake_A = self.fake_A.tanh()
 
     def backward_D_basic(self, netD, real, fake):
         # Real
@@ -111,11 +136,15 @@ class CycleGANModel(BaseModel):
         lambda_B = self.opt.lambda_B
         # Identity loss
         if lambda_idt > 0:
+            self.idt_A = self.netG_A(self.real_B).tanh()
+            self.idt_B = self.netG_B(self.real_A).tanh()
+            if self.opt.tanh:
+                self.idt_A = self.idt_A.tanh()
+                self.idt_B = self.idt_B.tanh()
+
             # G_A should be identity if real_B is fed.
-            self.idt_A = self.netG_A(self.real_B)
             self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
             # G_B should be identity if real_A is fed.
-            self.idt_B = self.netG_B(self.real_A)
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
         else:
             self.loss_idt_A = 0
@@ -126,11 +155,16 @@ class CycleGANModel(BaseModel):
         # GAN loss D_B(G_B(B))
         self.loss_G_B = self.criterionGAN(self.netD_B(self.fake_A), True)
         # Forward cycle loss
+
         self.loss_cycle_A = self.criterionCycle(self.rec_A, self.real_A) * lambda_A
-        # Backward cycle loss
+
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
+
+        if self.opt.invertible:
+            self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_idt_A + self.loss_idt_B
+        else:
         # combined loss
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
+            self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -140,10 +174,14 @@ class CycleGANModel(BaseModel):
         self.set_requires_grad([self.netD_A, self.netD_B], False)
         self.optimizer_G.zero_grad()
         self.backward_G()
+        if self.opt.g_grad_clip > 0.:
+            torch.nn.utils.clip_grad_norm_(self.G_parameters, self.opt.g_grad_clip)
         self.optimizer_G.step()
         # D_A and D_B
         self.set_requires_grad([self.netD_A, self.netD_B], True)
         self.optimizer_D.zero_grad()
         self.backward_D_A()
         self.backward_D_B()
+        if self.opt.d_grad_clip > 0.:
+            torch.nn.utils.clip_grad_norm_(self.D_parameters, self.opt.d_grad_clip)
         self.optimizer_D.step()

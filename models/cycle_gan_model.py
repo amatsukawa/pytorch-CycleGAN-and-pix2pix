@@ -18,6 +18,7 @@ class CycleGANModel(BaseModel):
             parser.add_argument('--lambda_B', type=float, default=10.0,
                                 help='weight for cycle loss (B -> A -> B)')
             parser.add_argument('--lambda_identity', type=float, default=0.5, help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
+            parser.add_argument('--gp', type=float, default=10, help='gradient penalty.')
 
         return parser
 
@@ -117,9 +118,24 @@ class CycleGANModel(BaseModel):
         pred_fake = netD(fake.detach())
         loss_D_fake = self.criterionGAN(pred_fake, False)
         # Combined loss
-        loss_D = (loss_D_real + loss_D_fake) * 0.5
+
+        if self.opt.gp > 0.:
+            batch_size = real.shape[0]
+            a = torch.rand([batch_size, 1, 1, 1], device=self.device)
+            interp = a * fake.detach() + (1-a) * real
+            interp = torch.autograd.Variable(interp, requires_grad=True)
+            interp_logits = netD(interp)
+            grad = torch.autograd.grad(outputs=torch.sum(interp_logits),
+                                       inputs=interp,
+                                       create_graph=True,
+                                       retain_graph=True)[0]
+            grad_norm = torch.norm(grad.view(batch_size, -1), 2, dim=1)
+            grad_penalty = torch.mean((grad_norm - 1)**2)
+            grad_penalty = self.opt.gp * grad_penalty
+
+        loss_D = (loss_D_real + loss_D_fake + grad_penalty) * 0.5
         # backward
-        loss_D.backward()
+        loss_D.backward(retain_graph=True)
         return loss_D
 
     def backward_D_A(self):

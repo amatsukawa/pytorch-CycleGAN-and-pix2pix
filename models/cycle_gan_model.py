@@ -52,8 +52,12 @@ class CycleGANModel(BaseModel):
         if self.opt.invertible:
             self.netG = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
                                             not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
-            self.netG_A = self.netG.transform
-            self.netG_B = self.netG.transform.inv
+            if hasattr(self.netG, 'transform'):
+                self.netG_A = self.netG.transform
+                self.netG_B = self.netG.transform.inv
+            elif hasattr(self.netG, 'inverse'):
+                self.netG_A = self.netG.forward
+                self.netG_B = self.netG.inverse
         else:
             self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
                                             not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)

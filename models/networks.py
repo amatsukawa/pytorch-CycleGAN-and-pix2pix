@@ -5,6 +5,7 @@ import functools
 from torch.optim import lr_scheduler
 
 from .glow import Glow
+from .irevnet import iRevNet
 
 ###############################################################################
 # Helper Functions
@@ -94,6 +95,11 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'glow':
         assert input_nc == output_nc, "invertible model must have same input_nc and output_nc"
         net = Glow(32, input_nc, ngf, squeeze=4)
+    elif netG == 'irevnet':
+        assert input_nc == output_nc, "invertible model must have same input_nc and output_nc"
+        net = iRevNet(nBlocks=[6, 16, 72, 6], nStrides=[2, 2, 2, 2],
+                      nChannels=[24, 96, 384, 1536],
+                      init_ds=2, dropout_rate=0., affineBN=True, in_shape=[3, 128, 128], mult=4)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)

@@ -136,8 +136,8 @@ class CycleGANModel(BaseModel):
         lambda_B = self.opt.lambda_B
         # Identity loss
         if lambda_idt > 0:
-            self.idt_A = self.netG_A(self.real_B).tanh()
-            self.idt_B = self.netG_B(self.real_A).tanh()
+            self.idt_A = self.netG_A(self.real_B)
+            self.idt_B = self.netG_B(self.real_A)
             if self.opt.tanh:
                 self.idt_A = self.idt_A.tanh()
                 self.idt_B = self.idt_B.tanh()

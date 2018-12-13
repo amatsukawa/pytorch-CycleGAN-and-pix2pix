@@ -1,8 +1,20 @@
+
+## CS236 Project Section
+
+### Run a version of GLOW that kind of works, but mode collapses facades of images <-> facades:
+
+```bash
+python train.py --dataroot ./datasets/facades --name facades_cyclegan \
+    --model cycle_gan --gpu_ids 0 --fineSize 128 --loadSize 135  \
+    --resize_or_crop scale_width --batch_size 4 --save_latest_freq 400 \
+    --invertible true --netG glow --g_lr 0.00001 --ngf 256 --tanh true
+```
+
 <img src='imgs/horse2zebra.gif' align="right" width=384>
 
 <br><br><br>
 
-# CycleGAN and pix2pix in PyTorch
+# CycleGAN and pix2pix in PyTorch - Original README
 
 We provide PyTorch implementations for both unpaired and paired image-to-image translation.
 
